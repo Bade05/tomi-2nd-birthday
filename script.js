@@ -1,3 +1,100 @@
+// ===== FIREBASE SETUP =====
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-analytics.js";
+import {
+  getDatabase,
+  ref,
+  push,
+  onValue,
+} from "https://www.gstatic.com/firebasejs/12.11.0/firebase-database.js";
+
+// web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyCCX1l2fVvp_E32QSaFhJGoK7GH1-iy3Kw",
+  authDomain: "tomi-s-birthday.firebaseapp.com",
+  databaseURL: "https://tomi-s-birthday-default-rtdb.firebaseio.com",
+  projectId: "tomi-s-birthday",
+  storageBucket: "tomi-s-birthday.firebasestorage.app",
+  messagingSenderId: "473345895124",
+  appId: "1:473345895124:web:6ff6e3ffdb31b9ddd72941",
+  measurementId: "G-9TP19X01HE",
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+
+// Initialize Database for Wishes
+const db = getDatabase(app);
+const wishesRef = ref(db, "wishes");
+
+// ===== WISHES LOGIC =====
+function initWishes() {
+  const form = document.getElementById("wishForm");
+  const board = document.getElementById("wishesBoard");
+
+  if (!form || !board) return;
+
+  // 1. Listen for real-time updates from Firebase
+  onValue(wishesRef, (snapshot) => {
+    const data = snapshot.val();
+    const wishes = data ? Object.values(data) : [];
+
+    // Sort by newest first
+    wishes.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    board.innerHTML = wishes
+      .map(
+        (w) => `
+      <div class="wish-card reveal visible">
+        <p class="font-medium mb-1" style="color: var(--cocoa);">${escapeHtml(w.name)}</p>
+        <p class="text-sm" style="color: var(--cocoa-muted);">${escapeHtml(w.message)}</p>
+      </div>
+    `,
+      )
+      .join("");
+  });
+
+  // 2. Handle Form Submission
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+
+    const name = document.getElementById("wishName").value.trim();
+    const message = document.getElementById("wishMessage").value.trim();
+
+    // Push new wish to Firebase
+    push(wishesRef, {
+      name,
+      message,
+      timestamp: new Date().toISOString(),
+    })
+      .then(() => {
+        form.reset();
+
+        // Show confirmation
+        const btn = form.querySelector('button[type="submit"]');
+        const originalText = btn.textContent;
+        btn.textContent = "Wish Sent!";
+        btn.disabled = true;
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.disabled = false;
+        }, 2000);
+      })
+      .catch((error) => {
+        console.error("Error sending wish:", error);
+        alert("There was an error sending your wish. Please try again.");
+      });
+  });
+}
+
+// Helper function to prevent XSS attacks
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 // ===== CONFIGURATION =====
 const CONFIG = {
   partyDate: new Date("2026-03-26T16:00:00+01:00"),
@@ -23,7 +120,6 @@ const milestones = [
 ];
 
 // ===== PHOTO FILENAMES =====
-
 const photoFilenames = [
   "cute tomi.JPG",
   "daddy's girl.JPG",
@@ -65,7 +161,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initRSVP();
   initCalendar();
   initLightbox();
-  initWishes();
+  initWishes(); // This will now use the Firebase version defined at the top
   initReminder();
   initScrollReveal();
 });
@@ -260,18 +356,15 @@ function navigateLightbox(direction) {
 }
 
 function initLightbox() {
-  // Close button
   const closeBtn = document.querySelector(".lightbox-close");
   if (closeBtn) closeBtn.addEventListener("click", closeLightbox);
 
-  // Navigation buttons
   const prevBtn = document.querySelector(".lightbox-prev");
   const nextBtn = document.querySelector(".lightbox-next");
 
   if (prevBtn) prevBtn.addEventListener("click", () => navigateLightbox(-1));
   if (nextBtn) nextBtn.addEventListener("click", () => navigateLightbox(1));
 
-  // Click outside to close
   const lightbox = document.getElementById("lightbox");
   if (lightbox) {
     lightbox.addEventListener("click", (e) => {
@@ -279,7 +372,6 @@ function initLightbox() {
     });
   }
 
-  // Keyboard navigation
   document.addEventListener("keydown", (e) => {
     const lightbox = document.getElementById("lightbox");
     if (!lightbox || !lightbox.classList.contains("active")) return;
@@ -326,10 +418,8 @@ function initRSVP() {
     });
     localStorage.setItem("tomiRsvps", JSON.stringify(rsvps));
 
-    // Hide form
     form.style.display = "none";
 
-    // Show appropriate response
     if (attendance === "yes") {
       const successYes = document.getElementById("successYes");
       if (successYes) successYes.classList.remove("hidden");
@@ -340,7 +430,6 @@ function initRSVP() {
     }
   });
 
-  // Maybe page back button
   const maybeBackBtn = document.getElementById("maybeBackBtn");
   if (maybeBackBtn) {
     maybeBackBtn.addEventListener("click", function () {
@@ -408,60 +497,6 @@ function initCalendar() {
   });
 }
 
-// ===== WISHES =====
-function initWishes() {
-  const form = document.getElementById("wishForm");
-  const board = document.getElementById("wishesBoard");
-
-  if (!form || !board) return;
-
-  function loadWishes() {
-    const wishes = JSON.parse(localStorage.getItem("tomiWishes") || "[]");
-    board.innerHTML = wishes
-      .map(
-        (w) => `
-      <div class="wish-card">
-        <p class="font-medium mb-1" style="color: var(--cocoa);">${escapeHtml(w.name)}</p>
-        <p class="text-sm" style="color: var(--cocoa-muted);">${escapeHtml(w.message)}</p>
-      </div>
-    `,
-      )
-      .join("");
-  }
-
-  loadWishes();
-
-  form.addEventListener("submit", function (e) {
-    e.preventDefault();
-
-    const name = document.getElementById("wishName").value.trim();
-    const message = document.getElementById("wishMessage").value.trim();
-
-    const wishes = JSON.parse(localStorage.getItem("tomiWishes") || "[]");
-    wishes.unshift({ name, message, timestamp: new Date().toISOString() });
-    localStorage.setItem("tomiWishes", JSON.stringify(wishes));
-
-    form.reset();
-    loadWishes();
-
-    // Show confirmation
-    const btn = form.querySelector('button[type="submit"]');
-    const originalText = btn.textContent;
-    btn.textContent = "Wish Sent!";
-    btn.disabled = true;
-    setTimeout(() => {
-      btn.textContent = originalText;
-      btn.disabled = false;
-    }, 2000);
-  });
-}
-
-function escapeHtml(text) {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
-
 // ===== REMINDER =====
 function initReminder() {
   const closeBtn = document.getElementById("closePopupBtn");
@@ -472,7 +507,6 @@ function initReminder() {
     });
   }
 
-  // Check reminder on load and periodically
   checkReminder();
   setInterval(checkReminder, 60000);
 }
